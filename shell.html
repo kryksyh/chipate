@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,22 +14,29 @@
             background: #1e1e1e;
             color: #d4d4d4;
         }
+
         .header {
             margin-bottom: 20px;
         }
+
         .controls {
             background: #252526;
             padding: 15px;
             border-radius: 5px;
             margin-bottom: 20px;
         }
+
         canvas {
             border: 1px solid #3c3c3c;
             background: #000;
         }
-        a { color: #4fc3f7; }
+
+        a {
+            color: #4fc3f7;
+        }
     </style>
 </head>
+
 <body>
     <div class="header">
         <h1>chipate</h1>
@@ -42,6 +50,10 @@
 4 5 6 D    →    Q W E R
 7 8 9 E    →    A S D F
 A 0 B F    →    Z X C V</pre>
+
+        <div>
+            Typically you can use either WADS or zxcv for game controls.
+        </div>
     </div>
 
     <div id="canvas-container">
@@ -56,11 +68,11 @@ A 0 B F    →    Z X C V</pre>
 
     <script type='text/javascript'>
         var Module = {
-            canvas: (function() {
+            canvas: (function () {
                 var canvas = document.getElementById('canvas');
-                canvas.addEventListener("webglcontextlost", function(e) { 
-                    alert('WebGL context lost. You will need to reload the page.'); 
-                    e.preventDefault(); 
+                canvas.addEventListener("webglcontextlost", function (e) {
+                    alert('WebGL context lost. You will need to reload the page.');
+                    e.preventDefault();
                 }, false);
                 return canvas;
             })()
@@ -69,4 +81,5 @@ A 0 B F    →    Z X C V</pre>
     {{{ SCRIPT }}}
 
 </body>
+
 </html>
