@@ -1,0 +1,12 @@
+{
+    "folders": [
+        {
+            "path": ".."
+        }
+    ],
+    "settings": {
+        "C_Cpp.autoAddFileAssociations": false,
+        "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
+        "editor.formatOnSave": true
+    }
+}
