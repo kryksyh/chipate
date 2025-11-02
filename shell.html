@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>chipate - CHIP-8 Emulator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .header {
+            margin-bottom: 20px;
+        }
+        .controls {
+            background: #252526;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        canvas {
+            border: 1px solid #3c3c3c;
+            background: #000;
+        }
+        a { color: #4fc3f7; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>chipate</h1>
+        <p>CHIP-8 emulator running in your browser</p>
+    </div>
+
+    <div class="controls">
+        <h3>Controls</h3>
+        <p>Original CHIP-8 keypad maps to your keyboard:</p>
+        <pre>1 2 3 C    →    1 2 3 4
+4 5 6 D    →    Q W E R
+7 8 9 E    →    A S D F
+A 0 B F    →    Z X C V</pre>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <p>
+            <a href="https://github.com/kryksyh/chipate" target="_blank">View source on GitHub</a>
+        </p>
+    </div>
+
+    <script type='text/javascript'>
+        var Module = {
+            canvas: (function() {
+                var canvas = document.getElementById('canvas');
+                canvas.addEventListener("webglcontextlost", function(e) { 
+                    alert('WebGL context lost. You will need to reload the page.'); 
+                    e.preventDefault(); 
+                }, false);
+                return canvas;
+            })()
+        };
+    </script>
+    {{{ SCRIPT }}}
+
+</body>
+</html>
