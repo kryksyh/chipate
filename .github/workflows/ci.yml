@@ -38,6 +38,12 @@ jobs:
             cxx: "cl"
             tag: "windows-msvc-latest"
 
+          - name: "WebAssembly (Emscripten)"
+            os: ubuntu-latest
+            cc: "emcc"
+            cxx: "em++"
+            tag: "wasm-emscripten"
+
     steps:
     - uses: actions/checkout@v4
 
@@ -62,17 +68,29 @@ jobs:
         # macOS has the required frameworks by default
         echo "No additional dependencies needed for macOS"
 
+    - name: Setup Emscripten
+      if: matrix.config.tag == 'wasm-emscripten'
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.51
+
     - name: Configure CMake
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.config.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
+        if [ "${{ matrix.config.tag }}" == "wasm-emscripten" ]; then
+          emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release -DPLATFORM=Web -DCMAKE_C_COMPILER=${{ matrix.config.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
+        else
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.config.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
+        fi
       env:
         CC: ${{ matrix.config.cc }}
         CXX: ${{ matrix.config.cxx }}
+      shell: bash
 
     - name: Build
       run: cmake --build build --config Release
 
     - name: Run tests
+      if: matrix.config.tag != 'wasm-emscripten'
       run: ctest --test-dir build --output-on-failure --build-config Release
 
     - name: Upload artifacts
@@ -83,4 +101,53 @@ jobs:
         path: |
           build/chipate*
           build/Release/chipate*
+          build/*.html
+          build/*.js
+          build/*.wasm
+          build/*.data
         retention-days: 7
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    steps:
+    - name: Download WebAssembly artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: chipate-ubuntu-latest-wasm-emscripten
+        path: ./public
+
+    - name: Create index redirect
+      run: |
+        cat > ./public/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta http-equiv="refresh" content="0; url=./chipate.html">
+          <title>Redirecting...</title>
+        </head>
+        <body>
+          <p>Redirecting to <a href="./chipate.html">chipate.html</a>...</p>
+        </body>
+        </html>
+        EOF
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+
+    - name: Upload to GitHub Pages
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./public
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
