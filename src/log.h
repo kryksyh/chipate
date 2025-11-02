@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: WTFPL
+
 #pragma once
 #include <chrono>
 #include <cstdarg>

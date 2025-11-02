@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: WTFPL
+
 #include "asm.h"
 
 #include "log.h"

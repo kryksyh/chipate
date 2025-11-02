@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: WTFPL
+
 #include "chip8.h"
 #include "log.h"
 
