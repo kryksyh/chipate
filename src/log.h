@@ -1,13 +1,14 @@
 #pragma once
 #include <chrono>
 #include <cstdarg>
+#include <cstring>
 #include <ctime>
 #include <iomanip>
 #include <raylib.h>
 #include <sstream>
 #include <string>
 
-namespace log {
+namespace chipate {
 
 inline std::string timestamp()
 {
@@ -43,7 +44,7 @@ inline void logMessage(int level, char const* file, int line, char const* fmt, .
     TraceLog(level, "%s", final.str().c_str());
 }
 
-} // namespace log
+} // namespace chipate
 
 #if defined(_WIN32)
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
@@ -51,8 +52,8 @@ inline void logMessage(int level, char const* file, int line, char const* fmt, .
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #endif
 
-#define logt(fmt, ...) log::logMessage(LOG_TRACE, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
-#define logd(fmt, ...) log::logMessage(LOG_DEBUG, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
-#define logi(fmt, ...) log::logMessage(LOG_INFO, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
-#define logw(fmt, ...) log::logMessage(LOG_WARNING, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
-#define loge(fmt, ...) log::logMessage(LOG_ERROR, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+#define logt(fmt, ...) chipate::logMessage(LOG_TRACE, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+#define logd(fmt, ...) chipate::logMessage(LOG_DEBUG, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+#define logi(fmt, ...) chipate::logMessage(LOG_INFO, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+#define logw(fmt, ...) chipate::logMessage(LOG_WARNING, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+#define loge(fmt, ...) chipate::logMessage(LOG_ERROR, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)

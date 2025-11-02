@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: "Ubuntu Latest GCC"
+            os: ubuntu-latest
+            cc: "gcc"
+            cxx: "g++"
+            tag: "ubuntu-gcc-latest"
+
+          - name: "Ubuntu Latest Clang"
+            os: ubuntu-latest
+            cc: "clang"
+            cxx: "clang++"
+            tag: "ubuntu-clang-latest"
+
+          - name: "macOS Latest"
+            os: macos-latest
+            cc: "clang"
+            cxx: "clang++"
+            tag: "macos-clang-latest"
+
+          - name: "Windows Latest MSVC"
+            os: windows-latest
+            cc: "cl"
+            cxx: "cl"
+            tag: "windows-msvc-latest"
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgl1-mesa-dev \
+          libglu1-mesa-dev \
+          libx11-dev \
+          libxrandr-dev \
+          libxi-dev \
+          libxcursor-dev \
+          libxinerama-dev \
+          libwayland-dev \
+          libxkbcommon-dev
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        # macOS has the required frameworks by default
+        echo "No additional dependencies needed for macOS"
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.config.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }}
+      env:
+        CC: ${{ matrix.config.cc }}
+        CXX: ${{ matrix.config.cxx }}
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure --build-config Release
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: chipate-${{ matrix.config.os }}-${{ matrix.config.tag }}
+        path: |
+          build/chipate*
+          build/Release/chipate*
+        retention-days: 7
