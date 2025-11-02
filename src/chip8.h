@@ -16,19 +16,24 @@ public:
     void tick();
     void setKey(int key, bool pressed);
 
+    bool hiRes() const
+    {
+        return hiResMode;
+    }
+
     // Grant tests access to internals without adding public accessors
     friend class Chip8TestAccess;
 
-    std::array<std::bitset<32>, 64> fb() const
+    std::array<std::bitset<64>, 128> fb() const
     {
         return FB;
     }
 
 private:
-    std::array<uint8_t, 4096>       memory;
-    std::array<std::bitset<32>, 64> FB; // Frame buffer
-    std::array<uint16_t, 16>        S;  // Stack
-    std::array<uint8_t, 16>         V;  // V0 to VF
+    std::array<uint8_t, 4096>        memory;
+    std::array<std::bitset<64>, 128> FB; // LowRes Frame buffer
+    std::array<uint16_t, 16>         S;  // Stack
+    std::array<uint8_t, 16>          V;  // V0 to VF
 
     uint16_t PC; // Program counter
     uint16_t I;  // Index register
@@ -42,6 +47,8 @@ private:
 
     bool    waitForKey;
     uint8_t waitForKeyReg;
+
+    bool hiResMode;
 
     bool exec(uint16_t instruction);
 
@@ -79,6 +86,13 @@ private:
     bool exec_lbcd(uint16_t instruction);
     bool exec_strg(uint16_t instruction);
     bool exec_ldrm(uint16_t instruction);
+
+    // Super Chip-48
+    bool exec_hirs(uint16_t instruction);
+    bool exec_lors(uint16_t instruction);
+    bool exec_scrd(uint16_t instruction);
+    bool exec_scrl(uint16_t instruction);
+    bool exec_scrr(uint16_t instruction);
 
     bool push(uint16_t data);
     bool pop(uint16_t &data);

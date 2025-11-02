@@ -3,19 +3,28 @@
 
 #include <raylib.h>
 
+std::vector<uint8_t> loadRom(std::string const& path)
+{
+    std::vector<uint8_t> romData;
+
+    FILE* file = fopen(path.c_str(), "rb");
+    if (!file) {
+        loge("Failed to open ROM file: %s", path.c_str());
+        return {};
+    }
+
+    fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    romData.resize(fileSize);
+    fread(romData.data(), 1, fileSize, file);
+    fclose(file);
+
+    return romData;
+}
+
 std::vector<uint8_t> testROM{
-    // 0x00, 0xE0, // 0x200: CLS (clear screen)
-    // 0x60, 0x00, // 0x202: V0 = 0
-    // 0x61, 0x00, // 0x204: V1 = 0
-    // 0xA2, 0x0C, // 0x206: I = 0x20C (sprite location in memory)
-    // 0xD0, 0x15, // 0x208: DRW V0, V1, 5 bytes tall
-    // 0x12, 0x08, // 0x20A: JP 200 — endless loop
-    // // --- Sprite data for digit "0" (5 bytes) ---
-    // 0xF0,       // ****....
-    // 0xA5,       // *.*.*...
-    // 0xFF,       // ********
-    // 0x5A,       // .*.*.*..
-    // 0xF0        // ****....
     0x12, 0x05, 0x43, 0x38, 0x50, 0x60, 0x00, 0x85, 0x00, 0xc0, 0x38, 0x81, 0x50, 0xa5, 0xb0, 0xf1,
     0x1e, 0xf0, 0x55, 0x60, 0x00, 0x85, 0x00, 0xc0, 0x18, 0x81, 0x50, 0xa5, 0xb8, 0xf1, 0x1e, 0xf0,
     0x55, 0x60, 0x00, 0xa5, 0xb0, 0xf0, 0x1e, 0xf0, 0x65, 0x8a, 0x00, 0x60, 0x00, 0xa5, 0xb8, 0xf0,
@@ -80,6 +89,25 @@ std::vector<uint8_t> testROM{
 
 };
 
+int keyMap[16] = {
+    KEY_X,     // 0
+    KEY_ONE,   // 1
+    KEY_TWO,   // 2
+    KEY_THREE, // 3
+    KEY_Q,     // 4
+    KEY_W,     // 5
+    KEY_E,     // 6
+    KEY_A,     // 7
+    KEY_S,     // 8
+    KEY_D,     // 9
+    KEY_Z,     // A
+    KEY_C,     // B
+    KEY_FOUR,  // C
+    KEY_R,     // D
+    KEY_F,     // E
+    KEY_V      // F
+};
+
 int main()
 {
 
@@ -88,23 +116,33 @@ int main()
     InitWindow(800, 450, "chipate");
     SetTargetFPS(75);
 
-    SetTraceLogLevel(LOG_TRACE);
-
     chipate::Chip8 chip8;
+
     chip8.init(testROM);
 
     while (!WindowShouldClose()) {
-        for (int i = 0; i < 1; ++i)
+        for (int i = 0; i < 10; ++i)
             chip8.tick();
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        // DrawText("Hello, chipate!", 190, 200, 20, LIGHTGRAY);
+
+        for (int i = 0; i < 16; ++i)
+            chip8.setKey(i, IsKeyDown(keyMap[i]));
 
         auto const fb = chip8.fb();
-        for (int col = 0; col < 64; ++col) {
-            for (int row = 0; row < 32; ++row)
-                if (fb[col][row])
-                    DrawRectangle(col * 10 + 50, row * 10 + 50, 10, 10, BLACK);
+        if (chip8.hiRes()) {
+            for (int col = 0; col < 128; ++col) {
+                for (int row = 0; row < 64; ++row)
+                    if (fb[col][row])
+                        DrawRectangle(col * 5 + 50, row * 5 + 50, 5, 5, BLACK);
+            }
+        }
+        else {
+            for (int col = 0; col < 64; ++col) {
+                for (int row = 0; row < 32; ++row)
+                    if (fb[col][row])
+                        DrawRectangle(col * 10 + 50, row * 10 + 50, 10, 10, BLACK);
+            }
         }
 
         EndDrawing();
