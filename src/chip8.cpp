@@ -5,6 +5,7 @@
 #include "log.h"
 #include "opcode.h"
 
+#include <cstdint>
 #include <stdlib.h>
 
 using namespace chipate;
@@ -53,14 +54,24 @@ void Chip8::init(std::vector<uint8_t> const& program)
     logi("Program loaded, size: %zu bytes", program.size());
 }
 
-void Chip8::tick()
+void Chip8::tock()
 {
     if (delayTimer)
         delayTimer--;
     if (soundTimer)
         soundTimer--;
+    waitForVBlank = false;
+}
+
+void Chip8::tick()
+{
     if (waitForKey) {
         logt("Waiting for key press...");
+        return;
+    }
+
+    if (waitForVBlank) {
+        logt("Waiting for VBlank...");
         return;
     }
 
@@ -308,8 +319,11 @@ bool Chip8::exec_orrg(uint16_t instruction)
 {
     uint8_t x = (instruction & 0x0F00) >> 8;
     uint8_t y = (instruction & 0x00F0) >> 4;
+    uint8_t f = 0x0F;
 
     V[x] |= V[y];
+    V[f]  = 0;
+
     logt("OR V%d | V%d = %x", x, y, V[x]);
 
     return true;
@@ -319,8 +333,11 @@ bool Chip8::exec_andr(uint16_t instruction)
 {
     uint8_t x = (instruction & 0x0F00) >> 8;
     uint8_t y = (instruction & 0x00F0) >> 4;
+    uint8_t f = 0x0F;
 
     V[x] &= V[y];
+    V[f]  = 0;
+
     logt("AND V%d & V%d = %x", x, y, V[x]);
 
     return true;
@@ -330,8 +347,11 @@ bool Chip8::exec_xorr(uint16_t instruction)
 {
     uint8_t x = (instruction & 0x0F00) >> 8;
     uint8_t y = (instruction & 0x00F0) >> 4;
+    uint8_t f = 0x0F;
 
     V[x] ^= V[y];
+    V[f]  = 0;
+
     logt("XOR V%d ^ V%d = %x", x, y, V[x]);
 
     return true;
@@ -343,9 +363,10 @@ bool Chip8::exec_addc(uint16_t instruction)
     uint8_t y = (instruction & 0x00F0) >> 4;
     uint8_t f = 0x0F;
 
-    V[f] = static_cast<uint16_t>(V[x]) + V[y] > 0xFF;
+    uint8_t carry = static_cast<uint16_t>(V[x]) + V[y] > 0xFF;
 
     V[x] += V[y];
+    V[f]  = carry;
     logt("ADDC V%d + V%d = %x, V[f]: %x", x, y, V[x], V[f]);
 
     return true;
@@ -357,9 +378,10 @@ bool Chip8::exec_subr(uint16_t instruction)
     uint8_t y = (instruction & 0x00F0) >> 4;
     uint8_t f = 0x0F;
 
-    V[f] = V[x] > V[y];
+    uint8_t carry = V[x] >= V[y];
 
     V[x] -= V[y];
+    V[f]  = carry;
     logt("SUB V%d - V%d = %x, V[f]", x, y, V[x], V[f]);
 
     return true;
@@ -368,11 +390,14 @@ bool Chip8::exec_subr(uint16_t instruction)
 bool Chip8::exec_shrr(uint16_t instruction)
 {
     uint8_t x = (instruction & 0x0F00) >> 8;
+    uint8_t y = (instruction & 0x00F0) >> 4;
     uint8_t f = 0x0F;
 
-    V[f] = V[x] & 0x01;
+    V[x]          = V[y];
+    uint8_t carry = V[x] & 0x01;
 
     V[x] >>= 1;
+    V[f]   = carry;
     logt("SHR V%d = %x, V[f]", x, V[x], V[f]);
 
     return true;
@@ -384,9 +409,10 @@ bool Chip8::exec_subn(uint16_t instruction)
     uint8_t y = (instruction & 0x00F0) >> 4;
     uint8_t f = 0x0F;
 
-    V[f] = V[y] > V[x];
+    uint8_t carry = V[y] >= V[x];
 
     V[x] = V[y] - V[x];
+    V[f] = carry;
     logt("ADDC V%d - V%d = %x, V[f]", x, y, V[x], V[f]);
 
     return true;
@@ -395,11 +421,14 @@ bool Chip8::exec_subn(uint16_t instruction)
 bool Chip8::exec_shlr(uint16_t instruction)
 {
     uint8_t x = (instruction & 0x0F00) >> 8;
+    uint8_t y = (instruction & 0x00F0) >> 4;
     uint8_t f = 0x0F;
 
-    V[f] = (V[x] >> 7) & 0x01;
+    V[x]          = V[y];
+    uint8_t carry = (V[x] >> 7) & 0x01;
 
     V[x] <<= 1;
+    V[f]   = carry;
     logt("SHL V%d = %x, V[f]", x, V[x], V[f]);
 
     return true;
@@ -457,29 +486,38 @@ bool Chip8::exec_rand(uint16_t instruction)
 
 bool Chip8::exec_draw(uint16_t instruction)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t n = (instruction & 0x000F);
-    uint8_t f = 0x0F;
+    uint8_t xReg = (instruction & 0x0F00) >> 8;
+    uint8_t yReg = (instruction & 0x00F0) >> 4;
+    uint8_t n    = (instruction & 0x000F);
+    uint8_t f    = 0x0f;
 
     V[f] = 0;
 
-    size_t maxRows = hiResMode ? 128 : 64;
-    size_t maxCols = hiResMode ? 64 : 32;
+    size_t screenWidth  = hiResMode ? 128 : 64;
+    size_t screenHeight = hiResMode ? 64 : 32;
 
-    for (uint8_t row = 0; row < n; row++) {
-        uint8_t spr = memory[I + row];
-        for (uint8_t col = 0; col < 8; col++) {
-            uint8_t pixel = (spr >> (7 - col)) & 0x01;
-            if (!pixel)
+    uint8_t x0 = V[xReg] % screenWidth;
+    uint8_t y0 = V[yReg] % screenHeight;
+
+    for (int col = 0; col < 8; col++) {
+        for (int row = 0; row < n; row++) {
+            auto x = (col + x0);
+            auto y = (row + y0);
+
+            if (x >= screenWidth || y >= screenHeight)
                 continue;
 
-            V[f]                       ^= FB[V[x] + col][V[y] + row];
-            FB[V[x] + col][V[y] + row]  = !FB[V[x] + col][V[y] + row];
+            auto curPixel = FB[x][y];
+            auto newPixel = memory[I + row] >> (7 - col) & 0x01;
+
+            V[f] |= (curPixel ? newPixel : 0);
+
+            curPixel = curPixel ^ newPixel;
         }
     }
 
-    logt("DRW V%d, V%d, %x", x, y, n);
+    logt("DRW V%d, V%d, %x", xReg, yReg, n);
+    waitForVBlank = true;
     return true;
 }
 
@@ -600,6 +638,8 @@ bool Chip8::exec_strg(uint16_t instruction)
     for (uint8_t i = 0; i <= x; ++i)
         memory[I + i] = V[i];
 
+    I += x + 1;
+
     logt("LDMR V0-V%d @ %x", x, I);
 
     return true;
@@ -611,6 +651,8 @@ bool Chip8::exec_ldrm(uint16_t instruction)
 
     for (uint8_t i = 0; i <= x; ++i)
         V[i] = memory[I + i];
+
+    I += x + 1;
 
     logt("LDRM V0-V%d @ %x", x, I);
 

@@ -16,6 +16,7 @@ public:
     Chip8();
     void init(std::vector<uint8_t> const &program);
     void tick();
+    void tock();
     void setKey(int key, bool pressed);
 
     bool hiRes() const
@@ -51,6 +52,7 @@ private:
     uint8_t waitForKeyReg;
 
     bool hiResMode;
+    bool waitForVBlank;
 
     bool exec(uint16_t instruction);
 

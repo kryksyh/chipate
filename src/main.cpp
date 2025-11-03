@@ -154,15 +154,17 @@ int main()
     logi("Initializing...");
 
     InitWindow(800, 450, "chipate");
-    SetTargetFPS(75);
+    SetTargetFPS(60);
 
     chipate::Chip8 chip8;
 
     chip8.init(testROM);
 
     while (!WindowShouldClose()) {
-        for (int i = 0; i < 10; ++i)
+        chip8.tock();
+        for (int i = 0; i < 15; ++i)
             chip8.tick();
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
