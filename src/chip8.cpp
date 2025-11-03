@@ -94,19 +94,20 @@ void Chip8::setKey(int key, bool pressed)
     }
 }
 
-bool Chip8::exec(uint16_t instruction)
+bool Chip8::exec(uint16_t data)
 {
     auto match =
-        std::find_if(opcodeMatches.begin(), opcodeMatches.end(), [instruction](auto const& match) {
-            return (instruction & match.mask) == match.opcode;
-        });
+        std::find_if(opcodeMatches.begin(), opcodeMatches.end(),
+                     [data](auto const& match) { return (data & match.mask) == match.opcode; });
 
     step();
 
     if (match == opcodeMatches.end()) {
-        loge("Unknown instruction: @%x: %x", PC, instruction);
+        loge("Unknown instruction: @%x: %x", PC, data);
         return false;
     }
+
+    Instruction instruction(data, V);
 
     switch (match->opcode) {
     case CLS:
@@ -193,9 +194,10 @@ bool Chip8::exec(uint16_t instruction)
     return false;
 }
 
-bool Chip8::exec_clrs(uint16_t instruction)
+// 00E0     Clear display (CLS)
+bool Chip8::exec_clrs(Instruction i)
 {
-    (void)instruction;
+    (void)i;
 
     FB.fill(0);
 
@@ -204,8 +206,11 @@ bool Chip8::exec_clrs(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_retn(uint16_t instruction)
+// 00EE     Return from subroutine (RET)
+bool Chip8::exec_retn(Instruction i)
 {
+    (void)i;
+
     bool status = pop(PC);
     if (status)
         logt("RET PC: %x", PC);
@@ -215,31 +220,29 @@ bool Chip8::exec_retn(uint16_t instruction)
     return status;
 }
 
-bool Chip8::exec_jump(uint16_t instruction)
+// 1nnn     Jump to address nnn (JP nnn)
+bool Chip8::exec_jump(Instruction i)
 {
-    uint16_t addr = instruction & 0x0FFF;
-    PC            = addr;
+    PC = i.nnn();
     logt("JP PC: %x", PC);
 
     return true;
 }
 
-bool Chip8::exec_call(uint16_t instruction)
+// 2nnn     Call subroutine at nnn (CALL nnn)
+bool Chip8::exec_call(Instruction i)
 {
-    uint16_t addr = instruction & 0x0FFF;
     push(PC);
-    PC = addr;
+    PC = i.nnn();
     logt("CALL PC: %x", PC);
 
     return true;
 }
 
-bool Chip8::exec_skeq(uint16_t instruction)
+// 3xkk     Skip next instruction if Vx == kk (SE Vx, kk)
+bool Chip8::exec_skeq(Instruction i)
 {
-    uint8_t x   = (instruction & 0x0F00) >> 8;
-    uint8_t val = (instruction & 0x00FF);
-
-    if (V[x] == val) {
+    if (i.vx() == i.kk()) {
         step();
         logt("SE +PC: %x", PC);
     }
@@ -250,12 +253,10 @@ bool Chip8::exec_skeq(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_skne(uint16_t instruction)
+// 4xkk     Skip next instruction if Vx != kk (SNE Vx, kk)
+bool Chip8::exec_skne(Instruction i)
 {
-    uint8_t x   = (instruction & 0x0F00) >> 8;
-    uint8_t val = (instruction & 0x00FF);
-
-    if (V[x] != val) {
+    if (i.vx() != i.kk()) {
         step();
         logt("SNE +PC: %x", PC);
     }
@@ -266,12 +267,10 @@ bool Chip8::exec_skne(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_sreq(uint16_t instruction)
+// 5xy0     Skip next instruction if Vx == Vy (SE Vx, Vy)
+bool Chip8::exec_sreq(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-
-    if (V[x] == V[y]) {
+    if (i.vx() == i.vy()) {
         step();
         logt("SRE +PC: %x", PC);
     }
@@ -282,164 +281,138 @@ bool Chip8::exec_sreq(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_ldim(uint16_t instruction)
+// 6xkk     Load immediate kk into Vx (LD Vx, kk)
+bool Chip8::exec_ldim(Instruction i)
 {
-    uint8_t x   = (instruction & 0x0F00) >> 8;
-    uint8_t val = (instruction & 0x00FF);
-
-    V[x] = val;
-    logt("LD V%d = %x", x, val);
+    i.vx() = i.kk();
+    logt("LD V%d = %x", i.x(), i.kk());
 
     return true;
 }
 
-bool Chip8::exec_addi(uint16_t instruction)
+// 7xkk     Add immediate kk to Vx (ADD Vx, kk)
+bool Chip8::exec_addi(Instruction i)
 {
-    uint8_t x   = (instruction & 0x0F00) >> 8;
-    uint8_t val = (instruction & 0x00FF);
-
-    V[x] += val;
-    logt("ADD V%d = %x", x, val);
+    i.vx() += i.kk();
+    logt("ADD V%d = %x", i.x(), i.vx());
 
     return true;
 }
 
-bool Chip8::exec_ldrg(uint16_t instruction)
+// 8xy0     Load Vy into Vx (LD Vx, Vy)
+bool Chip8::exec_ldrg(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-
-    V[x] = V[y];
-    logt("LDR V%d = V%d = %x", x, y, V[x]);
+    i.vx() = i.vy();
+    logt("LDR V%d = V%d = %x", i.x(), i.y(), i.vx());
 
     return true;
 }
 
-bool Chip8::exec_orrg(uint16_t instruction)
+// 8xy1     Bitwise OR Vx with Vy (OR Vx, Vy)
+bool Chip8::exec_orrg(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    i.vx() |= i.vy();
 
-    V[x] |= V[y];
-    V[f]  = 0;
+    Vf = 0;
 
-    logt("OR V%d | V%d = %x", x, y, V[x]);
+    logt("OR V%d | V%d = %x", i.x(), i.y(), i.vx());
 
     return true;
 }
 
-bool Chip8::exec_andr(uint16_t instruction)
+// 8xy2     Bitwise AND Vx with Vy (AND Vx, Vy)
+bool Chip8::exec_andr(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    i.vx() &= i.vy();
 
-    V[x] &= V[y];
-    V[f]  = 0;
+    Vf = 0;
 
-    logt("AND V%d & V%d = %x", x, y, V[x]);
+    logt("AND V%d & V%d = %x", i.x(), i.y(), i.vx());
 
     return true;
 }
 
-bool Chip8::exec_xorr(uint16_t instruction)
+// 8xy3     Bitwise XOR Vx with Vy (XOR Vx, Vy)
+bool Chip8::exec_xorr(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    i.vx() ^= i.vy();
 
-    V[x] ^= V[y];
-    V[f]  = 0;
+    Vf = 0;
 
-    logt("XOR V%d ^ V%d = %x", x, y, V[x]);
+    logt("XOR V%d ^ V%d = %x", i.x(), i.y(), i.vx());
 
     return true;
 }
 
-bool Chip8::exec_addc(uint16_t instruction)
+// 8xy4     Add Vy to Vx, set VF on carry (ADDC Vx, Vy)
+bool Chip8::exec_addc(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    uint8_t carry = static_cast<uint16_t>(i.vx()) + i.vy() > 0xFF;
 
-    uint8_t carry = static_cast<uint16_t>(V[x]) + V[y] > 0xFF;
+    i.vx() += i.vy();
 
-    V[x] += V[y];
-    V[f]  = carry;
-    logt("ADDC V%d + V%d = %x, V[f]: %x", x, y, V[x], V[f]);
+    Vf = carry;
+    logt("ADDC V%d + V%d = %x, V[f]: %x", i.x(), i.y(), i.vx(), Vf);
 
     return true;
 }
 
-bool Chip8::exec_subr(uint16_t instruction)
+// 8xy5     Subtract Vy from Vx, set VF on borrow (SUB Vx, Vy)
+bool Chip8::exec_subr(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    uint8_t carry = i.vx() >= i.vy();
 
-    uint8_t carry = V[x] >= V[y];
-
-    V[x] -= V[y];
-    V[f]  = carry;
-    logt("SUB V%d - V%d = %x, V[f]", x, y, V[x], V[f]);
+    i.vx() -= i.vy();
+    Vf      = carry;
+    logt("SUB V%d - V%d = %x, V[f]: %x", i.x(), i.y(), i.vx(), Vf);
 
     return true;
 }
 
-bool Chip8::exec_shrr(uint16_t instruction)
+// 8xy6     Shift Vx right by 1, set VF to least significant bit prior to shift (SHR Vx)
+bool Chip8::exec_shrr(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    i.vx() = i.vy();
 
-    V[x]          = V[y];
-    uint8_t carry = V[x] & 0x01;
+    uint8_t carry = i.vx() & 0x01;
 
-    V[x] >>= 1;
-    V[f]   = carry;
-    logt("SHR V%d = %x, V[f]", x, V[x], V[f]);
+    i.vx() >>= 1;
+
+    Vf = carry;
+    logt("SHR V%d = %x, V[f]: %x", i.x(), i.vx(), Vf);
 
     return true;
 }
 
-bool Chip8::exec_subn(uint16_t instruction)
+// 8xy7     Set Vx = Vy - Vx, set VF on borrow (SUBN Vx, Vy)
+bool Chip8::exec_subn(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    uint8_t carry = i.vy() >= i.vx();
 
-    uint8_t carry = V[y] >= V[x];
-
-    V[x] = V[y] - V[x];
-    V[f] = carry;
-    logt("ADDC V%d - V%d = %x, V[f]", x, y, V[x], V[f]);
+    i.vx() = i.vy() - i.vx();
+    Vf     = carry;
+    logt("SUBN V%d - V%d = %x, V[f]: %x", i.x(), i.y(), i.vx(), Vf);
 
     return true;
 }
 
-bool Chip8::exec_shlr(uint16_t instruction)
+// 8xyE     Shift Vx left by 1, set VF to most significant bit prior to shift (SHL Vx)
+bool Chip8::exec_shlr(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-    uint8_t f = 0x0F;
+    i.vx()        = i.vy();
+    uint8_t carry = (i.vx() >> 7) & 0x01;
 
-    V[x]          = V[y];
-    uint8_t carry = (V[x] >> 7) & 0x01;
-
-    V[x] <<= 1;
-    V[f]   = carry;
-    logt("SHL V%d = %x, V[f]", x, V[x], V[f]);
+    i.vx() <<= 1;
+    Vf       = carry;
+    logt("SHL V%d = %x, V[f]: %x", i.x(), i.vx(), Vf);
 
     return true;
 }
 
-bool Chip8::exec_sknr(uint16_t instruction)
+// 9xy0     Skip next instruction if Vx != Vy (SNE Vx, Vy)
+bool Chip8::exec_sknr(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    uint8_t y = (instruction & 0x00F0) >> 4;
-
-    if (V[x] != V[y]) {
+    if (i.vx() != i.vy()) {
         step();
         logt("SNER +PC: %x", PC);
     }
@@ -450,57 +423,49 @@ bool Chip8::exec_sknr(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_ldix(uint16_t instruction)
+// Annn     Load nnn into index register I (LD I, nnn)
+bool Chip8::exec_ldix(Instruction i)
 {
-    uint16_t val = (instruction & 0x0FFF);
-
-    I = val;
+    I = i.nnn();
 
     logt("LDI I: %x", I);
 
     return true;
 }
 
-bool Chip8::exec_jmpv(uint16_t instruction)
+// Bnnn     Jump to address nnn + V0 (JP V0, nnn)
+bool Chip8::exec_jmpv(Instruction i)
 {
-    uint16_t val = (instruction & 0x0FFF);
+    PC = i.nnn() + V[0];
 
-    PC = val + V[0];
-
-    logt("JPO PC: %x [V0:%x + %x]", PC, V[0], val);
+    logt("JPO PC: %x [V0:%x + %x]", PC, V[0], i.nnn());
 
     return true;
 }
 
-bool Chip8::exec_rand(uint16_t instruction)
+// Cxkk     Set Vx = random byte AND kk (RND Vx, kk)
+bool Chip8::exec_rand(Instruction i)
 {
-    uint8_t x   = (instruction & 0x0F00) >> 8;
-    uint8_t val = (instruction & 0x00FF);
+    i.vx() = (rand() % 256) & i.kk();
 
-    V[x] = (rand() % 256) & val;
-
-    logt("RND V%d: %x", x, V[x]);
+    logt("RND V%d: %x", i.x(), i.vx());
 
     return true;
 }
 
-bool Chip8::exec_draw(uint16_t instruction)
+// Dxyn     Draw sprite at (Vx, Vy) with height n (DRW Vx, Vy, n)
+bool Chip8::exec_draw(Instruction i)
 {
-    uint8_t xReg = (instruction & 0x0F00) >> 8;
-    uint8_t yReg = (instruction & 0x00F0) >> 4;
-    uint8_t n    = (instruction & 0x000F);
-    uint8_t f    = 0x0f;
-
-    V[f] = 0;
+    Vf = 0;
 
     size_t screenWidth  = hiResMode ? 128 : 64;
     size_t screenHeight = hiResMode ? 64 : 32;
 
-    uint8_t x0 = V[xReg] % screenWidth;
-    uint8_t y0 = V[yReg] % screenHeight;
+    uint8_t x0 = i.vx() % screenWidth;
+    uint8_t y0 = i.vy() % screenHeight;
 
     for (int col = 0; col < 8; col++) {
-        for (int row = 0; row < n; row++) {
+        for (int row = 0; row < i.n(); row++) {
             auto x = (col + x0);
             auto y = (row + y0);
 
@@ -510,133 +475,124 @@ bool Chip8::exec_draw(uint16_t instruction)
             auto curPixel = FB[x][y];
             auto newPixel = memory[I + row] >> (7 - col) & 0x01;
 
-            V[f] |= (curPixel ? newPixel : 0);
+            V[0x0F] |= (curPixel ? newPixel : 0);
 
             curPixel = curPixel ^ newPixel;
         }
     }
 
-    logt("DRW V%d, V%d, %x", xReg, yReg, n);
+    logt("DRW V%d[%d], V%d[%d], %x", i.x(), i.vx(), i.y(), i.vy(), i.n());
     waitForVBlank = true;
     return true;
 }
 
-bool Chip8::exec_skip(uint16_t instruction)
+// Ex9E     Skip next instruction if key with the value of Vx is pressed (SKP Vx)
+bool Chip8::exec_skip(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
-    if (K[V[x]]) {
+    if (K[i.vx()]) {
         step();
-        logt("SKP +PC: %x, Key: %d", PC, V[x]);
+        logt("SKP +PC: %x, Key: %d", PC, i.vx());
     }
     else {
-        logt("SKP -PC: %x, Key: %d", PC, V[x]);
+        logt("SKP -PC: %x, Key: %d", PC, i.vx());
     }
 
     return true;
 }
 
-bool Chip8::exec_sknp(uint16_t instruction)
+// ExA1     Skip next instruction if key with the value of Vx is not pressed (SKNP Vx)
+bool Chip8::exec_sknp(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
-    if (!K[V[x]]) {
+    if (!K[i.vx()]) {
         step();
-        logt("SKNP +PC: %x, Key: %d", PC, V[x]);
+        logt("SKNP +PC: %x, Key: %d", PC, i.vx());
     }
     else {
-        logt("SKNP -PC: %x, Key: %d", PC, V[x]);
+        logt("SKNP -PC: %x, Key: %d", PC, i.vx());
     }
 
     return true;
 }
 
-bool Chip8::exec_lddt(uint16_t instruction)
+// Fx07     Load delay timer value into Vx (LDRD Vx)
+bool Chip8::exec_lddt(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
-    V[x] = delayTimer;
-    logt("LDRD V%d: %x", x, V[x]);
+    i.vx() = delayTimer;
+    logt("LDRD V%d: %x", i.x(), i.vx());
 
     return true;
 }
 
-bool Chip8::exec_ldky(uint16_t instruction)
+// Fx0A     Wait for a key press, store the value of the key in Vx (LDK Vx)
+bool Chip8::exec_ldky(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
     waitForKey    = true;
-    waitForKeyReg = x;
+    waitForKeyReg = i.x();
 
-    logt("LDK V%d, waiting for key...", x);
-
+    logt("LDK V%d, waiting for key...", i.x());
     return true;
 }
 
-bool Chip8::exec_stdt(uint16_t instruction)
+// Fx15     Set delay timer = Vx (LDDR Vx)
+bool Chip8::exec_stdt(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
-    delayTimer = V[x];
+    delayTimer = i.vx();
     logt("LDDR DT: %x", delayTimer);
 
     return true;
 }
 
-bool Chip8::exec_stst(uint16_t instruction)
+// Fx18     Set sound timer = Vx (LDSR Vx)
+bool Chip8::exec_stst(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
-    soundTimer = V[x];
+    soundTimer = i.vx();
     logt("LDSR ST: %x", soundTimer);
 
     return true;
 }
 
-bool Chip8::exec_adin(uint16_t instruction)
+// Fx1E     Add Vx to index register I (ADDI Vx)
+bool Chip8::exec_adin(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
-    I += V[x];
+    I += i.vx();
     logt("ADDI I: %x", I);
 
     return true;
 }
 
-bool Chip8::exec_ldsp(uint16_t instruction)
+// Fx29     Load sprite location for digit Vx into index register I (LDS Vx)
+bool Chip8::exec_ldsp(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
-
-    if (V[x] > 0x0F) {
-        loge("LDS error: V%d (%x) out of range", x, V[x]);
-        V[x] &= 0x0F;
+    if (i.vx() > 0x0F) {
+        loge("LDS error: V%d (%x) out of range", i.x(), i.vx());
+        i.vx() &= 0x0F;
     }
 
-    I = V[x] * 5;
+    I = i.vx() * 5;
     logt("LDS I: %x", I);
 
     return true;
 }
 
-bool Chip8::exec_lbcd(uint16_t instruction)
+// Fx33     Store BCD representation of Vx in memory locations I, I+1, and I+2 (LBCD Vx)
+bool Chip8::exec_lbcd(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
+    memory[I]     = i.vx() / 100;
+    memory[I + 1] = (i.vx() / 10) % 10;
+    memory[I + 2] = i.vx() % 10;
 
-    memory[I]     = V[x] / 100;
-    memory[I + 1] = (V[x] / 10) % 10;
-    memory[I + 2] = V[x] % 10;
-
-    logt("LBCD %d @ %x", V[x], I);
+    logt("LBCD %d @ %x", i.vx(), I);
 
     return true;
 }
 
-bool Chip8::exec_strg(uint16_t instruction)
+// Fx55     Store registers V0 through Vx in memory starting at location I (LDMR Vx)
+bool Chip8::exec_strg(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
+    uint8_t x = i.x();
 
-    for (uint8_t i = 0; i <= x; ++i)
-        memory[I + i] = V[i];
+    for (uint8_t j = 0; j <= x; ++j)
+        memory[I + j] = V[j];
 
     I += x + 1;
 
@@ -645,23 +601,23 @@ bool Chip8::exec_strg(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_ldrm(uint16_t instruction)
+// Fx65     Read registers V0 through Vx from memory starting at location I (LDRM Vx)
+bool Chip8::exec_ldrm(Instruction i)
 {
-    uint8_t x = (instruction & 0x0F00) >> 8;
+    for (uint8_t j = 0; j <= i.x(); ++j)
+        V[j] = memory[I + j];
 
-    for (uint8_t i = 0; i <= x; ++i)
-        V[i] = memory[I + i];
+    I += i.x() + 1;
 
-    I += x + 1;
-
-    logt("LDRM V0-V%d @ %x", x, I);
+    logt("LDRM V0-V%d @ %x", i.x(), I);
 
     return true;
 }
 
-bool Chip8::exec_hirs(uint16_t instruction)
+// 00FF     Enable high-resolution mode (HIRS)
+bool Chip8::exec_hirs(Instruction i)
 {
-    (void)instruction;
+    (void)i;
 
     hiResMode = true;
 
@@ -670,9 +626,10 @@ bool Chip8::exec_hirs(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_lors(uint16_t instruction)
+// 00FE     Enable low-resolution mode (LORS)
+bool Chip8::exec_lors(Instruction i)
 {
-    (void)instruction;
+    (void)i;
 
     hiResMode = false;
 
@@ -681,24 +638,25 @@ bool Chip8::exec_lors(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_scrd(uint16_t instruction)
+// 00FD     Scroll down n pixels (SCRD n)
+bool Chip8::exec_scrd(Instruction i)
 {
-    uint8_t n = (instruction & 0x000F);
-
     size_t maxRows = hiResMode ? 128 : 64;
     size_t maxCols = hiResMode ? 64 : 32;
 
-    for (size_t r = maxRows - 1; r >= n; --r)
+    for (size_t r = maxRows - 1; r >= i.n(); --r)
         for (size_t c = 0; c < maxCols; ++c)
-            FB[c][r] = FB[c][r - n];
+            FB[c][r] = FB[c][r - i.n()];
 
-    logt("SCRD %d", n);
+    logt("SCRD %d", i.n());
 
     return true;
 }
 
-bool Chip8::exec_scrl(uint16_t instruction)
+// 00FC     Scroll left 4 pixels (SCRL)
+bool Chip8::exec_scrl(Instruction i)
 {
+    (void)i;
     uint8_t n = 4;
 
     size_t maxRows = hiResMode ? 128 : 64;
@@ -713,7 +671,8 @@ bool Chip8::exec_scrl(uint16_t instruction)
     return true;
 }
 
-bool Chip8::exec_scrr(uint16_t instruction)
+// 00FB     Scroll right 4 pixels (SCRR)
+bool Chip8::exec_scrr(Instruction i)
 {
     uint8_t n = 4;
 
@@ -721,10 +680,10 @@ bool Chip8::exec_scrr(uint16_t instruction)
     size_t maxCols = hiResMode ? 64 : 32;
 
     for (size_t r = 0; r < maxRows; ++r)
-        for (size_t c = maxCols - 1; c >= n; --c)
-            FB[c][r] = FB[c - n][r];
+        for (size_t c = maxCols - 1; c >= i.n(); --c)
+            FB[c][r] = FB[c - i.n()][r];
 
-    logt("SCRR %d", n);
+    logt("SCRR %d", i.n());
 
     return true;
 }

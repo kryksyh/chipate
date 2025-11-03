@@ -158,7 +158,7 @@ int main()
 
     chipate::Chip8 chip8;
 
-    chip8.init(testROM);
+    chip8.init(loadRom("/Users/dmitry/Downloads/5-quirks.ch8"));
 
     while (!WindowShouldClose()) {
         chip8.tock();
