@@ -74,6 +74,10 @@ public:
     void tick();
     void tock();
     void setKey(int key, bool pressed);
+    void setQuirks(Quirks const& quirks)
+    {
+        this->quirks = quirks;
+    }
 
     bool hiRes() const
     {

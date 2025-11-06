@@ -47,6 +47,9 @@ void Chip8::init(std::vector<uint8_t> const& program, Quirks const& quirks)
     SP = 0;
     delayTimer = 0;
     soundTimer = 0;
+    waitForKey = false;
+    waitForKeyReg = 0;
+    hiResMode = false;
 
     std::copy(ROM_DATA, ROM_DATA + 0x200, memory.begin());
 

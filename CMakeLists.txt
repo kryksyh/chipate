@@ -16,7 +16,14 @@ FetchContent_Declare(
   GIT_TAG 5.5)
 FetchContent_MakeAvailable(raylib)
 
+FetchContent_Declare(
+  raygui
+  GIT_REPOSITORY https://github.com/raysan5/raygui.git
+  GIT_TAG 4.0)
+FetchContent_MakeAvailable(raygui)
+
 add_executable(chipate src/main.cpp src/chip8.cpp src/asm.cpp)
+target_include_directories(chipate PRIVATE ${raygui_SOURCE_DIR}/src)
 target_link_libraries(chipate PRIVATE raylib)
 
 if(EMSCRIPTEN)
@@ -32,7 +39,6 @@ endif()
 enable_testing()
 
 if(NOT EMSCRIPTEN)
-  # Fetch Catch2 for unit tests
   FetchContent_Declare(
     Catch2
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
