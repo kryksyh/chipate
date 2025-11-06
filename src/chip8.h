@@ -13,12 +13,25 @@ namespace chipate {
 
 using Registers = std::array<uint8_t, 16>;
 
+struct Quirks {
+    // Shift operations only use Vx
+    bool shiftVxOnly = false;
+    // Load/Store increment I by X + 1
+    bool loadStoreIAdd = false;
+    // Jump with Vx offset, where x is the most significant nibble of nnn instead of V0
+    bool jumpWithVx = false;
+    // Bitwise logic do not set VF
+    bool logicNoVF = false;
+    // Wrap sprites around screen edges
+    bool spriteWrap = false;
+};
+
 struct Instruction {
     Instruction(uint16_t d, Registers& regs)
         : data(d)
         , registers(regs)
     {}
-    uint16_t   data;
+    uint16_t data;
     Registers& registers;
 
     uint8_t& vx()
@@ -55,7 +68,7 @@ struct Instruction {
 class Chip8 {
 public:
     Chip8();
-    void init(std::vector<uint8_t> const& program);
+    void init(std::vector<uint8_t> const& program, Quirks const& quirks = {});
     void tick();
     void tock();
     void setKey(int key, bool pressed);
@@ -74,23 +87,25 @@ public:
     }
 
 private:
-    std::array<uint8_t, 4096>        memory;
+    std::array<uint8_t, 4096> memory;
     std::array<std::bitset<64>, 128> FB; // LowRes Frame buffer
-    std::array<uint16_t, 16>         S;  // Stack
-    std::array<uint8_t, 16>          V;  // V0 to VF
-    uint8_t&                         Vf = V[0x0F];
+    std::array<uint16_t, 16> S;          // Stack
+    std::array<uint8_t, 16> V;           // V0 to VF
+    uint8_t& Vf = V[0x0F];
 
     uint16_t PC; // Program counter
     uint16_t I;  // Index register
-    uint8_t  SP; // Stack pointer
+    uint8_t SP;  // Stack pointer
 
     std::map<uint8_t, bool> K;
+
+    Quirks quirks;
 
     // Timers
     uint8_t delayTimer;
     uint8_t soundTimer;
 
-    bool    waitForKey;
+    bool waitForKey;
     uint8_t waitForKeyReg;
 
     bool hiResMode;

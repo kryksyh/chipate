@@ -6,6 +6,7 @@
 #include "opcode.h"
 
 #include <cstdint>
+#include <random>
 #include <stdlib.h>
 
 using namespace chipate;
@@ -33,16 +34,17 @@ Chip8::Chip8()
     , hiResMode(false)
 {}
 
-void Chip8::init(std::vector<uint8_t> const& program)
+void Chip8::init(std::vector<uint8_t> const& program, Quirks const& quirks)
 {
+    this->quirks = quirks;
     srand(static_cast<unsigned int>(time(nullptr)));
     memory.fill(0);
     FB.fill(0);
     S.fill(0);
     V.fill(0);
-    PC         = 0x200;
-    I          = 0;
-    SP         = 0;
+    PC = 0x200;
+    I = 0;
+    SP = 0;
     delayTimer = 0;
     soundTimer = 0;
 
@@ -86,10 +88,10 @@ void Chip8::tick()
 void Chip8::setKey(int key, bool pressed)
 {
     uint8_t k = static_cast<uint8_t>(key);
-    K[k]      = pressed;
+    K[k] = pressed;
     if (waitForKey && pressed) {
         V[waitForKeyReg] = k;
-        waitForKey       = false;
+        waitForKey = false;
         logt("Key received: %d -> V%d", key, waitForKeyReg);
     }
 }
@@ -363,7 +365,7 @@ bool Chip8::exec_subr(Instruction i)
     uint8_t carry = i.vx() >= i.vy();
 
     i.vx() -= i.vy();
-    Vf      = carry;
+    Vf = carry;
     logt("SUB V%d - V%d = %x, V[f]: %x", i.x(), i.y(), i.vx(), Vf);
 
     return true;
@@ -372,11 +374,13 @@ bool Chip8::exec_subr(Instruction i)
 // 8xy6     Shift Vx right by 1, set VF to least significant bit prior to shift (SHR Vx)
 bool Chip8::exec_shrr(Instruction i)
 {
-    i.vx() = i.vy();
+    uint8_t v = i.vx();
+    if (!quirks.shiftVxOnly)
+        v = i.vy();
 
-    uint8_t carry = i.vx() & 0x01;
+    uint8_t carry = v & 0x01;
 
-    i.vx() >>= 1;
+    i.vx() = v >> 1;
 
     Vf = carry;
     logt("SHR V%d = %x, V[f]: %x", i.x(), i.vx(), Vf);
@@ -390,7 +394,7 @@ bool Chip8::exec_subn(Instruction i)
     uint8_t carry = i.vy() >= i.vx();
 
     i.vx() = i.vy() - i.vx();
-    Vf     = carry;
+    Vf = carry;
     logt("SUBN V%d - V%d = %x, V[f]: %x", i.x(), i.y(), i.vx(), Vf);
 
     return true;
@@ -399,11 +403,14 @@ bool Chip8::exec_subn(Instruction i)
 // 8xyE     Shift Vx left by 1, set VF to most significant bit prior to shift (SHL Vx)
 bool Chip8::exec_shlr(Instruction i)
 {
-    i.vx()        = i.vy();
-    uint8_t carry = (i.vx() >> 7) & 0x01;
+    uint8_t v = i.vx();
+    if (!quirks.shiftVxOnly)
+        v = i.vy();
 
-    i.vx() <<= 1;
-    Vf       = carry;
+    uint8_t carry = (v >> 7) & 0x01;
+
+    i.vx() = v << 1;
+    Vf = carry;
     logt("SHL V%d = %x, V[f]: %x", i.x(), i.vx(), Vf);
 
     return true;
@@ -446,7 +453,11 @@ bool Chip8::exec_jmpv(Instruction i)
 // Cxkk     Set Vx = random byte AND kk (RND Vx, kk)
 bool Chip8::exec_rand(Instruction i)
 {
-    i.vx() = (rand() % 256) & i.kk();
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(0, 255);
+
+    i.vx() = dis(gen) & i.kk();
 
     logt("RND V%d: %x", i.x(), i.vx());
 
@@ -458,7 +469,7 @@ bool Chip8::exec_draw(Instruction i)
 {
     Vf = 0;
 
-    size_t screenWidth  = hiResMode ? 128 : 64;
+    size_t screenWidth = hiResMode ? 128 : 64;
     size_t screenHeight = hiResMode ? 64 : 32;
 
     uint8_t x0 = i.vx() % screenWidth;
@@ -526,7 +537,7 @@ bool Chip8::exec_lddt(Instruction i)
 // Fx0A     Wait for a key press, store the value of the key in Vx (LDK Vx)
 bool Chip8::exec_ldky(Instruction i)
 {
-    waitForKey    = true;
+    waitForKey = true;
     waitForKeyReg = i.x();
 
     logt("LDK V%d, waiting for key...", i.x());
@@ -577,7 +588,7 @@ bool Chip8::exec_ldsp(Instruction i)
 // Fx33     Store BCD representation of Vx in memory locations I, I+1, and I+2 (LBCD Vx)
 bool Chip8::exec_lbcd(Instruction i)
 {
-    memory[I]     = i.vx() / 100;
+    memory[I] = i.vx() / 100;
     memory[I + 1] = (i.vx() / 10) % 10;
     memory[I + 2] = i.vx() % 10;
 

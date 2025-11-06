@@ -158,7 +158,19 @@ int main()
 
     chipate::Chip8 chip8;
 
-    chip8.init(loadRom("/Users/dmitry/Downloads/5-quirks.ch8"));
+    chipate::Quirks chip_8 = {.shiftVxOnly = false,
+                              .loadStoreIAdd = false,
+                              .jumpWithVx = false,
+                              .logicNoVF = false,
+                              .spriteWrap = false};
+
+    chipate::Quirks schip_1_0 = {.shiftVxOnly = true,
+                                 .loadStoreIAdd = true,
+                                 .jumpWithVx = true,
+                                 .logicNoVF = true,
+                                 .spriteWrap = true};
+
+    chip8.init(loadRom("/Users/dmitry/Downloads/5-quirks.ch8"), chip_8);
 
     while (!WindowShouldClose()) {
         chip8.tock();
