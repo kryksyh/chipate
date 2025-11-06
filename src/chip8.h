@@ -24,6 +24,8 @@ struct Quirks {
     bool logicNoVF = false;
     // Wrap sprites around screen edges
     bool spriteWrap = false;
+    // Legacy SCHIP scroll n/2
+    bool legacySchipScroll = false;
 };
 
 struct Instruction {

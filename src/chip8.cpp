@@ -652,14 +652,21 @@ bool Chip8::exec_lors(Instruction i)
 // 00FD     Scroll down n pixels (SCRD n)
 bool Chip8::exec_scrd(Instruction i)
 {
-    size_t maxRows = hiResMode ? 128 : 64;
-    size_t maxCols = hiResMode ? 64 : 32;
+    size_t maxCols = hiRes() ? 128 : 64;
+    size_t maxRows = hiRes() ? 64 : 32;
+    uint8_t n = i.n();
 
-    for (size_t r = maxRows - 1; r >= i.n(); --r)
+    if (!hiRes() && quirks.legacySchipScroll)
+        n /= 2;
+
+    for (size_t r = maxRows - 1; r >= n; --r)
         for (size_t c = 0; c < maxCols; ++c)
-            FB[c][r] = FB[c][r - i.n()];
+            FB[c][r] = FB[c][r - n];
+    for (size_t r = 0; r < n; ++r)
+        for (size_t c = 0; c < maxCols; ++c)
+            FB[c][r] = 0;
 
-    logt("SCRD %d", i.n());
+    logt("SCRD %d", n);
 
     return true;
 }
@@ -670,12 +677,18 @@ bool Chip8::exec_scrl(Instruction i)
     (void)i;
     uint8_t n = 4;
 
-    size_t maxRows = hiResMode ? 128 : 64;
-    size_t maxCols = hiResMode ? 64 : 32;
+    if (!hiRes() && quirks.legacySchipScroll)
+        n /= 2;
 
-    for (size_t r = 0; r < maxRows; ++r)
-        for (size_t c = 0; c < maxCols - n; ++c)
-            FB[c][r] = FB[c][r + n];
+    size_t maxCols = hiRes() ? 128 : 64;
+    size_t maxRows = hiRes() ? 64 : 32;
+
+    for (size_t c = 0; c < maxCols - n; c++)
+        for (size_t r = 0; r < maxRows; r++)
+            FB[c][r] = FB[c + n][r];
+    for (size_t c = maxCols - n; c < maxCols; c++)
+        for (size_t r = 0; r < maxRows; r++)
+            FB[c][r] = 0;
 
     logt("SCRL %d", n);
 
@@ -685,16 +698,23 @@ bool Chip8::exec_scrl(Instruction i)
 // 00FB     Scroll right 4 pixels (SCRR)
 bool Chip8::exec_scrr(Instruction i)
 {
+    (void)i;
     uint8_t n = 4;
 
-    size_t maxRows = hiResMode ? 128 : 64;
-    size_t maxCols = hiResMode ? 64 : 32;
+    if (!hiRes() && quirks.legacySchipScroll)
+        n /= 2;
 
-    for (size_t r = 0; r < maxRows; ++r)
-        for (size_t c = maxCols - 1; c >= i.n(); --c)
-            FB[c][r] = FB[c - i.n()][r];
+    size_t maxCols = hiRes() ? 128 : 64;
+    size_t maxRows = hiRes() ? 64 : 32;
 
-    logt("SCRR %d", i.n());
+    for (size_t c = maxCols - n; c > 0; c--)
+        for (size_t r = 0; r < maxRows; r++)
+            FB[c + n - 1][r] = FB[c - 1][r];
+    for (size_t c = 0; c < n; c++)
+        for (size_t r = 0; r < maxRows; r++)
+            FB[c][r] = 0;
+
+    logt("SCRL %d", n);
 
     return true;
 }

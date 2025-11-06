@@ -162,15 +162,24 @@ int main()
                               .loadStoreIAdd = false,
                               .jumpWithVx = false,
                               .logicNoVF = false,
-                              .spriteWrap = false};
+                              .spriteWrap = false,
+                              .legacySchipScroll = false};
 
     chipate::Quirks schip_1_0 = {.shiftVxOnly = true,
                                  .loadStoreIAdd = true,
                                  .jumpWithVx = true,
                                  .logicNoVF = true,
-                                 .spriteWrap = true};
+                                 .spriteWrap = true,
+                                 .legacySchipScroll = true};
 
-    chip8.init(loadRom("/Users/dmitry/Downloads/5-quirks.ch8"), chip_8);
+    chipate::Quirks schip_modern = {.shiftVxOnly = true,
+                                    .loadStoreIAdd = true,
+                                    .jumpWithVx = true,
+                                    .logicNoVF = true,
+                                    .spriteWrap = true,
+                                    .legacySchipScroll = false};
+
+    chip8.init(loadRom("/Users/dmitry/Downloads/8-scrolling.ch8"), schip_1_0);
 
     while (!WindowShouldClose()) {
         chip8.tock();
