@@ -8,9 +8,12 @@
 #include <string>
 
 #define RAYGUI_IMPLEMENTATION
-#include "../styles/dark/style_dark.h"
+#include <raygui/raygui.h>
+#include <raygui/styles/dark/style_dark.h>
+#include <nlohmann/json.hpp>
+#include <cmrc/cmrc.hpp>
 
-#include <raygui.h>
+CMRC_DECLARE(chip8archive);
 
 int const WINDOW_WIDTH = 800;
 int const WINDOW_HEIGHT = 600;
@@ -36,37 +39,18 @@ std::vector<uint8_t> loadRom(std::string const& path)
     return romData;
 }
 
-std::array<char const*, 24> ROMS = {
-    "Maze",           "Particle Demo", "Sierpinski",        "Trip8 Demo",  "Stars",
-    "pumpkindressup", "br8kout",       "octopeg",           "snake",       "RPS",
-    "flightrunner",   "rockto",        "spacejam",          "test_opcode", "1-chip8-logo",
-    "2-ibm-logo",     "3-corax+",      "4-flags",           "4-flags (1)", "5-quirks",
-    "6-keypad",       "8-scrolling",   "random_number_test"};
+struct RomInfo {
+    std::string name;
+    std::string path;
+    std::string title;
+    std::string authors;
+    std::string release;
+    std::string event;
+    std::string platform;
+    std::string desc;
+};
 
-std::array<std::string, 24> romPaths{
-    "/Users/dmitry/Downloads/Maze (alt) [David Winter, 199x].ch8",
-    "/Users/dmitry/Downloads/Particle Demo [zeroZshadow, 2008].ch8",
-    "/Users/dmitry/Downloads/Sierpinski [Sergey Naydenov, 2010].ch8",
-    "/Users/dmitry/Downloads/Trip8 Demo (2008) [Revival Studios].ch8",
-    "/Users/dmitry/Downloads/Stars [Sergey Naydenov, 2010].ch8",
-    "/Users/dmitry/Downloads/pumpkindressup.ch8",
-    "/Users/dmitry/Downloads/br8kout.ch8",
-    "/Users/dmitry/Downloads/octopeg.ch8",
-    "/Users/dmitry/Downloads/snake.ch8",
-    "/Users/dmitry/Downloads/RPS.ch8",
-    "/Users/dmitry/Downloads/flightrunner.ch8",
-    "/Users/dmitry/Downloads/rockto.ch8",
-    "/Users/dmitry/Downloads/spacejam.ch8",
-    "/Users/dmitry/Downloads/test_opcode.ch8",
-    "/Users/dmitry/Downloads/1-chip8-logo.ch8",
-    "/Users/dmitry/Downloads/2-ibm-logo.ch8",
-    "/Users/dmitry/Downloads/3-corax+.ch8",
-    "/Users/dmitry/Downloads/4-flags.ch8",
-    "/Users/dmitry/Downloads/4-flags (1).ch8",
-    "/Users/dmitry/Downloads/5-quirks.ch8",
-    "/Users/dmitry/Downloads/6-keypad.ch8",
-    "/Users/dmitry/Downloads/8-scrolling.ch8",
-    "/Users/dmitry/Downloads/random_number_test.ch8"};
+std::vector<RomInfo> ROMS;
 
 int keyMap[16] = {
     KEY_X,     // 0
@@ -87,15 +71,11 @@ int keyMap[16] = {
     KEY_V      // F
 };
 
-void loadRom(chipate::Chip8& chip8, int idx)
+void loadRom(chipate::Chip8& chip8, RomInfo const& rom)
 {
-    if (idx < 0 || idx >= ROMS.size()) {
-        loge("Invalid ROM index: %d", idx);
-        return;
-    }
-
-    std::string romPath = romPaths[idx];
-    chip8.init(loadRom(romPath), chipate::Quirks{});
+    auto fs = cmrc::chip8archive::get_filesystem();
+    auto file = fs.open(rom.path);
+    chip8.init(std::vector<uint8_t>(file.begin(), file.end()), chipate::Quirks{});
 }
 
 void drawDisplay(chipate::Chip8& chip8, size_t x, size_t y, size_t width, size_t height)
@@ -125,8 +105,59 @@ void drawDisplay(chipate::Chip8& chip8, size_t x, size_t y, size_t width, size_t
 
 int main()
 {
-
     logi("Initializing...");
+
+    logi("Loading resources...");
+    logi("Loading Chip-8 archive...");
+    auto fs = cmrc::chip8archive::get_filesystem();
+    auto file = fs.open("programs.json");
+    std::vector<const char*> romNameSelectorData;
+
+
+    nlohmann::json programsJson;
+    try {
+        programsJson = nlohmann::json::parse(file);
+        for (auto& [program, info] : programsJson.items()) {
+
+            if (info["platform"] != "chip8" && info["platform"] != "schip") {
+                logi("Skipping non-Chip-8 program: %s", program.c_str());
+                continue;
+            }
+            std::string name = program;
+            std::string title = info["title"];
+            std::string desc = info["desc"];
+            std::string release = info["release"];
+            std::string event = info.contains("event") ? info["event"] : "";
+            std::string platform = info["platform"];
+            std::string authors;
+            for (auto& author : info["authors"]) {
+                if (!authors.empty())
+                    authors += ", ";
+                authors += author.get<std::string>();
+            }
+            logi("Found program: %s %s (%s)", name.c_str(), title.c_str(), desc.c_str());
+
+            ROMS.push_back({
+                .name = name,
+                .path = "roms/" + name + ".ch8",
+                .title = title,
+                .authors = authors,
+                .release = release,
+                .event = event,
+                .platform = platform,
+                .desc = desc
+            });
+
+        }
+    }
+    catch (nlohmann::json::parse_error& e) {
+        loge("Failed to parse programs.json: %s", e.what());
+        return -1;
+    }
+
+    for (const auto& rom : ROMS) {
+        romNameSelectorData.push_back(rom.title.c_str());
+    }
 
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "chipate");
     SetTargetFPS(60);
@@ -160,10 +191,6 @@ int main()
     chipate::Quirks* currentQuirks = &schip_1_0;
     bool romLoaded = false;
 
-    chip8.init(loadRom("/Users/dmitry/Downloads/Maze (alt) [David Winter, 199x].ch8"),
-               *currentQuirks);
-    romLoaded = true;
-
     bool quirkSelectorEditMode = false;
     int quirkSelectorActive = 0;
 
@@ -177,9 +204,11 @@ int main()
     GuiLoadStyleDark();
     while (!WindowShouldClose()) {
         if (romLoaded) {
-            chip8.tock();
-            for (int i = 0; i < tickRate; ++i)
+            for (int i = 0; i < tickRate; ++i) {
                 chip8.tick();
+            }
+
+            chip8.tock();
         }
 
         if (IsFileDropped()) {
@@ -199,22 +228,56 @@ int main()
         if (quirkSelectorEditMode)
             GuiLock();
 
-        GuiLabel((Rectangle){15, 10, 150, 20}, "Machine:");
+        GuiSetStyle(LABEL, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
 
-        GuiLabel((Rectangle){15, 65, 150, 20}, "Tick rate:");
+        GuiLabel({15, 10, 150, 20}, "Machine:");
 
-        if (GuiSpinner((Rectangle){15, 90, 150, 20}, nullptr, &tickRate, 1, 1000, spinnerEditMode))
+        GuiLabel({15, 65, 150, 20}, "Tick rate:");
+
+        if (GuiSpinner({15, 90, 150, 20}, nullptr, &tickRate, 1, 100000, spinnerEditMode))
             spinnerEditMode = !spinnerEditMode;
 
-        GuiListViewEx((Rectangle){175, 10, 320, 110}, ROMS.data(), ROMS.size(), &romsScrollIndex,
+        GuiSetStyle(LISTVIEW, LIST_ITEMS_SPACING, 3);
+        GuiSetStyle(LISTVIEW, LIST_ITEMS_HEIGHT, 17);
+        GuiSetStyle(LISTVIEW, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
+        GuiListViewEx({175, 10, 320, 110}, romNameSelectorData.data(), romNameSelectorData.size(), &romsScrollIndex,
                       &romsActive, &romsFocus);
-        if (GuiButton((Rectangle){175, 130, 320, 20}, "LOAD")) {
+
+        romsActive = std::clamp(romsActive, 0, static_cast<int>(ROMS.size()) - 1);
+        const auto& selectedRom = ROMS[romsActive];
+
+        if (GuiButton({175, 130, 320, 20}, "LOAD")) {
             if (romsActive >= 0 && romsActive < ROMS.size()) {
-                std::string romPath = romPaths[romsActive];
-                chip8.init(loadRom(romPath), *currentQuirks);
+                const auto& rom = ROMS[romsActive];
+                loadRom(chip8,rom);
                 romLoaded = true;
             }
         }
+
+
+        GuiLabel( {500, 10, 80, 20}, "Author: ");
+        GuiLabel( {580, 10, 200, 20}, selectedRom.authors.c_str());
+
+        GuiLabel( {500, 35, 80, 20}, "Release: ");
+        GuiLabel( {580, 35, 200, 20}, selectedRom.release.c_str());
+
+        GuiLabel( {500, 60, 80, 20}, "Event: ");
+        GuiLabel( {580, 60, 200, 20}, selectedRom.event.c_str());
+
+        GuiLabel( {500, 85, 80, 20}, "Platform: ");
+        GuiLabel( {580, 85, 200, 20}, selectedRom.platform.c_str());
+
+        auto prevWrapMode = GuiGetStyle(DEFAULT, TEXT_WRAP_MODE);
+        auto prevAlignment = GuiGetStyle(DEFAULT, TEXT_ALIGNMENT);
+        auto prevLineSpacing = GuiGetStyle(DEFAULT, TEXT_LINE_SPACING);
+        GuiSetStyle(DEFAULT, TEXT_WRAP_MODE, TEXT_WRAP_WORD);
+        GuiSetStyle(DEFAULT, TEXT_ALIGNMENT_VERTICAL, TEXT_ALIGN_TOP);
+        GuiSetStyle(DEFAULT, TEXT_LINE_SPACING, 17);
+        GuiLabel({500, 110, 280, 70}, selectedRom.desc.c_str());
+
+        GuiSetStyle(DEFAULT, TEXT_WRAP_MODE, prevWrapMode);
+        GuiSetStyle(DEFAULT, TEXT_ALIGNMENT, prevAlignment);
+        GuiSetStyle(DEFAULT, TEXT_LINE_SPACING, prevLineSpacing);
 
         int displayWidth = (WINDOW_WIDTH - 30) / 128 * 128;
         int displayHeight = ((WINDOW_HEIGHT - 170 - 20) / 128) * 128;
@@ -226,7 +289,7 @@ int main()
         drawDisplay(chip8, displayX, displayY, displayWidth, displayHeight);
 
         int prevPreset = quirkSelectorActive;
-        if (GuiDropdownBox((Rectangle){15, 35, 150, 20}, "CHIP-8;SCHIP 1.0;SCHIP Modern",
+        if (GuiDropdownBox({15, 35, 150, 20}, "CHIP-8;SCHIP 1.0;SCHIP Modern",
                            &quirkSelectorActive, quirkSelectorEditMode))
             quirkSelectorEditMode = !quirkSelectorEditMode;
         if (prevPreset != quirkSelectorActive) {

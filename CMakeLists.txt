@@ -17,14 +17,27 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(raylib)
 
 FetchContent_Declare(
-  raygui
-  GIT_REPOSITORY https://github.com/raysan5/raygui.git
-  GIT_TAG 4.0)
-FetchContent_MakeAvailable(raygui)
+  chip8archive
+  GIT_REPOSITORY https://github.com/JohnEarnest/chip8Archive.git
+  GIT_TAG master)
+
+FetchContent_MakeAvailable(chip8archive)
+
+include (third_party/cmrc/CMakeRC.cmake)
+
+file(GLOB ROM_FILES "${chip8archive_SOURCE_DIR}/roms/*")
+cmrc_add_resource_library(chip8archive-resources
+  NAMESPACE chip8archive
+  WHENCE ${chip8archive_SOURCE_DIR}
+  ${chip8archive_SOURCE_DIR}/programs.json
+  ${ROM_FILES}
+)
 
 add_executable(chipate src/main.cpp src/chip8.cpp src/asm.cpp)
-target_include_directories(chipate PRIVATE ${raygui_SOURCE_DIR}/src)
-target_link_libraries(chipate PRIVATE raylib)
+target_include_directories(chipate PRIVATE third_party)
+target_link_libraries(chipate PRIVATE raylib chip8archive-resources)
+
+set(CMAKE_COLOR_DIAGNOSTICS ON)
 
 if(EMSCRIPTEN)
   set(CMAKE_EXECUTABLE_SUFFIX ".html")
